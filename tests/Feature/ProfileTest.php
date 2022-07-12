@@ -4,115 +4,53 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
-use Tests\TestCase;
 
-class ProfileTest extends TestCase
-{
-    use DatabaseMigrations;
-    /**
-     * Test Auth user profile data
-     *
-     * @return void
-     */
-    public function testProfileData()
-    {
-        $user = User::factory()->create();
+uses(DatabaseMigrations::class);
 
-        $response = $this->actingAs($user, 'api')
-            ->getJson('/api/profile');
+test('it can access profile of logged in user', function () {
+    $user = User::factory()->create();
 
-        $response
-            ->assertStatus(200)
-            ->assertJson([
-                'success' => true,
-                'data' => true,
-            ]);
-    }
+    $this->actingAs($user, 'api')->get(route('profile.who-am-i'))->assertSuccessful()->assertOk();
+});
 
-    /**
-     * Test profile data without Auth
-     *
-     * @return void
-     */
-    public function testProfileDataWithoutAuth()
-    {
-        $user = User::factory()->create();
-
-        $response = $this->getJson('/api/profile');
-
-        $response->assertStatus(401);
-    }
-
-    /**
-     * Test Update Profile Success
-     *
-     * @return void
-     */
-    public function testUpdateProfile()
-    {
-        $user = User::factory()->create();
-
-        $response = $this->actingAs($user, 'api')
-            ->putJson('/api/profile', ['email' => $this->faker->email, 'name' => $this->faker->name]);
-
-        $response
-            ->assertStatus(200)
-            ->assertJson([
-                'success' => true
-            ]);
-    }
-
-    /**
-     * Test Update Profile Validation Error
-     *
-     * @return void
-     */
-    public function testUpdateProfileValidationError()
-    {
-        $user = User::factory()->create();
-
-        $response = $this->actingAs($user, 'api')
-            ->putJson('/api/profile', ['name' => $this->faker->name]);
-
-        $response->assertStatus(422);
-    }
-
-    /**
-     * Test Change Password Success
-     *
-     * @return void
-     */
-    public function testChangePassword()
-    {
-        $user = User::factory()->create();
-
-        $response = $this->actingAs($user, 'api')
-            ->postJson('/api/change-password', [
-                'current_password' => 123456,
-                'new_password' => 123456789,
-                'confirm_password' => 123456789
-            ]);
-
-        $response->assertStatus(200)
-            ->assertJson([
-                'success' => true,
-                'message' => true
-            ]);
-    }
+test("it can't access api profile if not logged in", function () {
+    $this->get(route('profile.who-am-i'))->assertStatus(401);
+});
 
 
-    /**
-     * Test Change Password Validation Error
-     *
-     * @return void
-     */
-    public function testChangePasswordValidationError()
-    {
-        $user = User::factory()->create();
+test('it can update profile', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user, 'api')->put(route('profile.update'), ['email' => $this->faker->email, 'name' => $this->faker->name])->assertOk()->assertSuccessful();
+});
 
-        $response = $this->actingAs($user, 'api')
-            ->postJson('/api/change-password', ['current_password' => $this->faker->password]);
+test("it can't update profile", function () {
+    $this->put(route('profile.update'), ['email' => $this->faker->email, 'name' => $this->faker->name])->assertOk()->assertSuccessful();
+});
+test('it can return validation error when updating profile', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user, 'api')
+        ->put(route('profile.update'), ['name' => fake()->name])
+        ->assertStatus(422);
+});
 
-        $response->assertStatus(422);
-    }
-}
+
+test('it can change password', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user, 'api')
+        ->post(route('profile.change-password'), [
+            'current_password' => 123456,
+            'new_password' => 123456789,
+            'confirm_password' => 123456789
+        ])
+        ->assertOk()
+        ->assertSuccessful()
+        ->assertJson(['success' => true, 'message' => true]);
+});
+test('it returns validation error when changing password using invalid data', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user, 'api')
+        ->postJson('/api/change-password', [
+            'current_password' => fake()->password
+        ])
+        ->assertStatus(422);
+});

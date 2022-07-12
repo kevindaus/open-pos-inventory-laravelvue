@@ -4,169 +4,131 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
-use Tests\TestCase;
+use Symfony\Component\HttpFoundation\Response as ResponseCode;
+use function Pest\Laravel\assertDatabaseHas;
 
-class UserTest extends TestCase
-{
-    use DatabaseMigrations;
+uses(DatabaseMigrations::class);
 
-    /**
-     * Test User List for Admin
-     *
-     * @return void
-     */
-    public function testUserListForAdmin()
-    {
-        $user = User::factory()->create();
+test('admin can list users', function () {
+    /*TODO  : after creating admin user , assign role to */
+    $user = User::factory()->create();
 
-        $this->actingAs($user, 'api')
-            ->getJson('/api/user')
-            ->assertOk()
-            ->assertSuccessful()
-            ->assertJson([
-                'success' => true,
-                'data' => true,
-            ]);
-    }
-
-    /**
-     * Test User List for user type
-     *
-     * @return void
-     */
-    public function testUserListForStandardUser()
-    {
-        $user = User::factory()->create([
-            'type' => 'user',
+    $this->actingAs($user, 'api')
+        ->get(route('user.index'))
+        ->assertOk()
+        ->assertSuccessful()
+        ->assertJson([
+            'success' => true,
+            'data' => true,
         ]);
+});
 
-        $response = $this->actingAs($user, 'api')
-            ->getJson('/api/user');
+test("admin can list user with standard user type", function () {
+    /* TODO : create and login as admin */
+    $adminUser = User::factory()->create([
+        'type' => 'admin'
+    ]);
 
-        $response
-            ->assertStatus(403)
-            ->assertJson([
-                'success' => false
-            ]);
-    }
+    $this->actingAs($adminUser, 'api')
+        ->get('/api/user')
+        ->assertOk()
+        ->assertSuccessful();
 
-    /**
-     * Store user
-     *
-     * @return void
-     */
-    public function testStoreUser()
-    {
-        $user = User::factory()->create();
+});
 
-        $data = [
+test('admin can store user', function () {
+    /* @TODO create user and assign role */
+    $adminUser = User::factory()->create([
+        'type' => 'admin'
+    ]);
+    $newEmail = fake()->unique()->email();
+    $newName = fake()->name();
+    $this->actingAs($adminUser)
+        ->post(route('user.store'), [
+            'name' => $newName,
+            'email' => $newEmail,
+            'password' => \Hash::make("123456"),
+            'type' => 'user',
+        ])
+        ->assertOk()
+        ->assertSuccessful();
+    assertDatabaseHas('users', [
+        'name' => $newName,
+        'email' => $newEmail,
+        'password' => \Hash::make("123456"),
+        'type' => 'user',
+    ]);
+    /* TODO  - validate the returned json as well*/
+});
+
+test('storing incomplete data returns validation error', function () {
+    $adminUser = User::factory()->create([
+        'type' => 'admin'
+    ]);
+    $this->actingAs($adminUser)
+        ->post(route('user.store'), [
             'name' => fake()->name,
             'email' => fake()->unique()->email(),
             'password' => \Hash::make("123456"),
             'type' => 'user',
-        ];
+        ])
+        ->assertStatus(400);
+});
 
-        $response = $this->actingAs($user, 'api')
-            ->postJson('/api/user', $data);
-
-        $response
-            ->assertStatus(200)
-            ->assertJson([
-                'success' => true
-            ]);
-    }
-
-    /**
-     * Store user validation errors
-     *
-     * @return void
-     */
-    public function testStoreUserValidationError()
-    {
-        $user = User::factory()->create();
-
-        $data = [
-            'name' => fake()->name(),
+test('it can update user information', function () {
+    $adminUser = User::factory()->create([
+        'type' => 'admin'
+    ]);
+    $userTobeUpdated = User::factory()->create([
+        'type' => 'user'
+    ]);
+    $newEmail = fake()->email();
+    $this->actingAs($adminUser)
+        ->put(route('user.update', $userTobeUpdated), [
             'type' => 'admin',
-        ];
+            'name' => fake()->name(),
+            'email' => $newEmail,
+        ])
+        ->assertOk()
+        ->assertSuccessful();
+    assertDatabaseHas('users', ['email' => $newEmail]);
+});
 
-        $response = $this->actingAs($user, 'api')
-            ->postJson('/api/user', $data);
+test('it shows validation error when sending incomplete data', function () {
+    $adminUser = User::factory()->create([
+        'type' => 'admin'
+    ]);
+    $userTobeUpdated = User::factory()->create([
+        'type' => 'user'
+    ]);
+    $newEmail = fake()->email();
+    $this->actingAs($adminUser)
+        ->patch(route('user.update', ['user' => $userTobeUpdated]), [
+            'email' => $newEmail,
+        ])
+        ->assertStatus(ResponseCode::HTTP_BAD_REQUEST);
+});
+test('it can delete user record', function () {
+    $adminUser = User::factory()->create([
+        'type' => 'admin'
+    ]);
+    $userTobeDeleted = User::factory()->create([
+        'type' => 'user'
+    ]);
+    $this->actingAs($adminUser, 'api')
+        ->delete(route('user.destroy', ['user' => $userTobeDeleted]))
+        ->assertOk()
+        ->assertSuccessful();
+});
 
-        $response->assertStatus(422);
-    }
-
-    /**
-     * Update user
-     *
-     * @return void
-     */
-    public function testUpdateUser()
-    {
-        $user = User::factory()->create();
-
-        $data = [
-            'name' => $this->faker->name,
-            'type' => 'user'
-        ];
-
-        $response = $this->actingAs($user, 'api')
-            ->putJson('/api/user/' . $user->id, $data);
-        $response
-            ->assertStatus(200)
-            ->assertJson([
-                'success' => true
-            ]);
-    }
-
-    /**
-     * Store user validation errors
-     *
-     * @return void
-     */
-    public function testUpdateUserValidationError()
-    {
-        $user = User::factory()->create();
-
-        $response = $this->actingAs($user, 'api')
-            ->putJson('/api/user/' . $user->id, ['email' => 'Invalid@email com']);
-
-        $response->assertStatus(422);
-    }
-
-
-    /**
-     * Delete User
-     *
-     * @return void
-     */
-    public function testDeleteUser()
-    {
-        $user = User::factory()->create();
-
-        $response = $this->actingAs($user, 'api')
-            ->deleteJson('/api/user/' . $user->id);
-
-        $response->assertStatus(200)
-            ->assertJson([
-                'success' => true
-            ]);
-    }
-
-    /**
-     * Delete User by Non-Admin User
-     *
-     * @return void
-     */
-    public function testDeleteUserForNonAdminUser()
-    {
-        $user = User::factory()->create([
-            'type' => 'user',
-        ]);
-
-        $response = $this->actingAs($user, 'api')
-            ->deleteJson('/api/user/' . $user->id);
-
-        $response->assertStatus(403);
-    }
-}
+test('it doesnt allow user delete for non admin', function () {
+    $normalUser = User::factory()->create([
+        'type' => 'user'
+    ]);
+    $userTobeDeleted = User::factory()->create([
+        'type' => 'user'
+    ]);
+    $this->actingAs($normalUser, 'api')
+        ->delete(route('user.destroy', ['user' => $userTobeDeleted]))
+        ->assertStatus(ResponseCode::HTTP_FORBIDDEN);
+});
